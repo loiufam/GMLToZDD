@@ -144,11 +144,13 @@ public:
 			
 			if (cc >= IN && !linkCheck(mate, cc)) {
 				++counter;
-				
+				if (constraint.upper() < counter) return 0;
+				/* maybe misstake
 				if (constraint.upper() == counter) {
 					if (otherCCs(mate, cc)) return 0;
 					else return -1;
 				}
+				*/
 			}
 			
 			if (++i == n) {
