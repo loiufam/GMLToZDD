@@ -700,14 +700,18 @@ public:
      */
     void dumpSapporo(std::ostream& os) const {
         int const n = diagram->numRows() - 1;
+        cout << "graph num of rows: " << n << "\n";
         size_t const l = size();
 
-        os << "_i " << n << "\n";
-        os << "_o 1\n";
-        os << "_n " << l << "\n";
+        // os << "_i " << n << "\n";
+        // os << "_o 1\n";
+        // os << "_n " << l << "\n";
 
         DataTable<size_t> nodeId(diagram->numRows());
         size_t k = 0;
+
+        // 首先遍历并缓存输出内容
+        // std::vector<std::string> lines;
 
         for (int i = 1; i <= n; ++i) {
             size_t const m = (*diagram)[i].size();
@@ -717,12 +721,14 @@ public:
             for (size_t j = 0; j < m; ++j, ++p) {
                 k += 2;
                 nodeId[i][j] = k;
-                os << k << " " << i;
+                os << k << " " << n - i + 1;
+                // std::ostringstream ss;
+                // ss << k << " " << i;
 
                 for (int c = 0; c <= 1; ++c) {
                     NodeId fc = p->branch[c];
                     if (fc == 0) {
-                        os << " F";
+                        os << " B";
                     }
                     else if (fc == 1) {
                         os << " T";
@@ -733,6 +739,7 @@ public:
                 }
 
                 os << "\n";
+                // lines.push_back(ss.str());
             }
 
             MyVector<int> const& levels = diagram->lowerLevels(i);
@@ -741,7 +748,11 @@ public:
             }
         }
 
-        os << nodeId[root_.row()][root_.col()] << "\n";
+        // os << nodeId[root_.row()][root_.col()] << "\n";
+        // 倒序输出
+        // for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+        //     os << *it;
+        // }
         assert(k == l * 2);
     }
 };

@@ -212,7 +212,7 @@ public:
 					
 					for (size_t k = 0; k < F; ++k) {
 						if (frontier[level][k] != frontier[nxt_level][k]) {
-							nxt_f &= ((1LL << 63) - 1) ^ (1LL << k);
+							nxt_f &= ((1ULL << 63) - 1) ^ (1LL << k);
 						}
 					}
 					
@@ -286,7 +286,7 @@ public:
 					
 					for (size_t k = 0; k < F; ++k) {
 						if (frontier[level][k] != frontier[nxt_level][k]) {
-							nxt_f &= ((1LL << 63) - 1) ^ (1LL << k);
+							nxt_f &= ((1ULL << 63) - 1) ^ (1LL << k);
 						}
 						
 						if (cc[k] == 'r' && (nxt_f >> k & 1) == 0) {

@@ -21,12 +21,29 @@
 # DEALINGS IN THE SOFTWARE.
 
 TARGET   = cnfbdd
-CXX      = g++
+# macOS OpenMP support
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    CXX = clang++
+    # Use Clang with libomp for better macOS compatibility
+    # CXXFLAGS += -Xclang -fopenmp
+    # LDFLAGS += -lomp
+
+    # LDFLAGS += -L/opt/homebrew/opt/libomp/lib
+    # CPPFLAGS += -I/opt/homebrew/opt/libomp/include
+else
+    CXX = g++
+	LDFLAGS += -fopenmp
+endif
+    
 CPP      = $(CXX) -E
 CPPFLAGS += -I../../include
-CXXFLAGS += -fopenmp -Wall -fmessage-length=0
-LDFLAGS  += -fopenmp
+CPPFLAGS += -I/usr/local/include
+CXXFLAGS += -Wall -fmessage-length=0
+
 LDLIBS   += -lcudd
+# Add CUDD library path
+LDFLAGS  += -L/usr/local/lib
 
 ifeq ($(OS),Windows_NT)
 	LDLIBS += -lpsapi
@@ -52,8 +69,8 @@ $(TARGET): $(OBJS)
 $(TARGET:%=%-debug): $(OBJS:%.o=%-debug.o)
 	$(CXX) $(LDFLAGS) $(TARGET_ARCH) $^ $(LDLIBS) -o $@
 
-clean:
-	$(RM) $(TARGET) $(OBJS) $(TARGET:%=%-debug) $(OBJS:%.o=%-debug.o)
+clean_obj:
+	$(RM) $(OBJS) $(OBJS:%.o=%-debug.o)
 
 define make-depend
 	$(RM) depend.in

@@ -24,9 +24,11 @@ TARGET   = cnf2ztdd2bdd
 CXX      = g++
 CPP      = $(CXX) -E
 CPPFLAGS += -I../../include
-CXXFLAGS += -fopenmp -Wall -fmessage-length=0
-LDFLAGS  += -fopenmp
+CPPFLAGS += -I/usr/local/include
+CXXFLAGS += -Wall -fmessage-length=0
+# LDFLAGS  += -fopenmp
 LDLIBS   += -lcudd
+LDFLAGS  += -L/usr/local/lib
 
 ifeq ($(OS),Windows_NT)
 	LDLIBS += -lpsapi
