@@ -1,5 +1,3 @@
-import os
-
 def zbdd_to_sparse_matrix_file(input_file_path, output_file_path):
     # Step 1: 解析节点
     nodes = {}
@@ -45,7 +43,7 @@ def zbdd_to_sparse_matrix_file(input_file_path, output_file_path):
             # 先处理lo分支（不选择当前变量）
             dfs_sparse(node["lo"], ones)
             # 再处理hi分支（选择当前变量）
-            dfs_sparse(node["hi"], ones + [max_level + 1 - node["level"]])
+            dfs_sparse(node["hi"], ones + [node["level"]])
 
     dfs_sparse(root_node, [])
 
@@ -55,10 +53,5 @@ def zbdd_to_sparse_matrix_file(input_file_path, output_file_path):
         for row in sparse_matrix:
             f.write(f"{len(row)} " + " ".join(map(str, row)) + "\n")
 
-# 批量转换
-# for file in os.listdir("data"):
-#     if file.endswith(".zdd"):
-#         filename = file[:-4]
-#         zbdd_to_sparse_matrix_file("data/" + file, "output/" + filename + ".txt")
-
-zbdd_to_sparse_matrix_file("data/eil51.zdd", "eil51.txt")
+# 转换
+zbdd_to_sparse_matrix_file("att48.zdd", "att48_t.txt")

@@ -170,7 +170,7 @@ public:
 		
 		if (vertex_var) {
 			CCS_HV ccs(graph, "connected", cc_constraint);
-			dd = DdStructure< 2 >(ccs);
+			dd = DdStructure< 2 >(ccs, true);
 		} else {
 			CCS ccs(graph, "connected", cc_constraint);
 			dd = DdStructure< 2 >(ccs);
@@ -395,6 +395,78 @@ public:
 		
 		vvar = true;
 		return result;
+	}
+
+	void EnumCycle( std::string file_name,
+					int sourceVertex = -1,
+                    double customerRatio = 0.3,
+                    int maxPathsPerCustomer = 100) {	
+
+		const int V = graph.getNumOfV();
+    
+		if (sourceVertex < 0) {
+			sourceVertex = V / 2;
+		}
+		std::cout << "Source vertex: " << sourceVertex << std::endl;
+		
+		std::vector<int> allVertices;
+		for (int i = 0; i < V; ++i) {
+			if (i != sourceVertex) {
+				allVertices.push_back(i);
+			}
+		}
+		
+		std::random_device rd;
+		std::mt19937 gen(rd());
+		std::shuffle(allVertices.begin(), allVertices.end(), gen);
+		
+		int numCustomers = static_cast<int>(V * customerRatio);
+		if (numCustomers < 1) numCustomers = 1;
+		if (numCustomers > allVertices.size()) numCustomers = allVertices.size();
+		
+		std::vector<int> customers(allVertices.begin(), allVertices.begin() + numCustomers);
+		std::sort(customers.begin(), customers.end());
+		std::cout << "Customers size: " << customers.size() << std::endl;
+
+		std::map<int, int> vertexToColId;
+		for (int i = 0; i < customers.size(); ++i) {
+			vertexToColId[customers[i]] = i + 1;  // 列ID从1开始
+		}
+		
+		std::vector<std::vector<int>> options;  // 每个option是客户点的列ID集合
+
+		for (int targetCustomer : customers) {
+			std::cout << "\nEnumerating paths: " << sourceVertex 
+					<< " -> " << targetCustomer << "..." << std::endl;
+			
+			// 构造 s-t 路径的 ZDD
+			PAC_HV pac(graph, sourceVertex, targetCustomer);
+			DdStructure<2> pathZdd(pac);
+			pathZdd.zddReduce();
+			
+			std::cout << "  ZDD size: " << pathZdd.size() << std::endl;
+			
+			pathZdd.enumZddPath(options, vertexToColId);	
+		}
+		
+		std::cout << "\nTotal options (paths): " << options.size() << std::endl;
+
+		ofstream os(file_name.c_str());
+		if (os.fail()) fopen_err(file_name);
+
+		int numCols = numCustomers;  // 列数
+    	int numRows = options.size();  // 行数
+		os << numCols << " " << numRows << "\n";
+    
+		for (const auto& option : options) {
+			os << option.size();
+			for (int colId : option) {
+				os << " " << colId;
+			}
+			os << "\n";
+		}
+		os.close();
+
 	}
 };
 

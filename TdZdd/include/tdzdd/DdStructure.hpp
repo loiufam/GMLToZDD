@@ -29,8 +29,10 @@
 #include <climits>
 #include <ostream>
 #include <set>
+#include <map>
 #include <stdexcept>
 #include <vector>
+#include <random>
 
 #include "DdEval.hpp"
 #include "DdSpec.hpp"
@@ -66,6 +68,7 @@ public:
             root_(0), useMP(false) {
     }
 
+    ~DdStructure() = default;
 //    /*
 //     * Imports the ZDD that can be broken.
 //     * @param o the ZDD.
@@ -105,10 +108,11 @@ public:
     DdStructure(DdSpecBase<SPEC,ARITY> const& spec, bool useMP = false) :
             useMP(useMP) {
 #ifdef _OPENMP
-        if (useMP) constructMP_(spec.entity());
+        if (useMP) 
+            constructMP_(spec.entity());
         else
-#endif
-        construct_(spec.entity());
+#endif  
+           construct_(spec.entity());
     }
 
 private:
@@ -700,7 +704,7 @@ public:
      */
     void dumpSapporo(std::ostream& os) const {
         int const n = diagram->numRows() - 1;
-        cout << "graph num of rows: " << n << "\n";
+        std::cout << "graph num of rows: " << n << "\n";
         size_t const l = size();
 
         // os << "_i " << n << "\n";
@@ -710,9 +714,6 @@ public:
         DataTable<size_t> nodeId(diagram->numRows());
         size_t k = 0;
 
-        // 首先遍历并缓存输出内容
-        // std::vector<std::string> lines;
-
         for (int i = 1; i <= n; ++i) {
             size_t const m = (*diagram)[i].size();
             Node<ARITY> const* p = (*diagram)[i].data();
@@ -721,9 +722,7 @@ public:
             for (size_t j = 0; j < m; ++j, ++p) {
                 k += 2;
                 nodeId[i][j] = k;
-                os << k << " " << n - i + 1;
-                // std::ostringstream ss;
-                // ss << k << " " << i;
+                os << k << " " << i;
 
                 for (int c = 0; c <= 1; ++c) {
                     NodeId fc = p->branch[c];
@@ -739,7 +738,6 @@ public:
                 }
 
                 os << "\n";
-                // lines.push_back(ss.str());
             }
 
             MyVector<int> const& levels = diagram->lowerLevels(i);
@@ -749,12 +747,127 @@ public:
         }
 
         // os << nodeId[root_.row()][root_.col()] << "\n";
-        // 倒序输出
-        // for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
-        //     os << *it;
-        // }
+
         assert(k == l * 2);
     }
+
+    /**
+     * 从 ZDD 导出矩阵文件。
+     * 每条从根节点到 T 节点的路径代表一个子集（连通子图的顶点集）。
+     * 输出矩阵格式：
+     * 第一行：列数 行数
+     * 其余行：<元素个数> [col ...]  (col 从 1 开始编号)
+     */
+    void dumpMatrix(std::ostream& os) const {
+        int const n = diagram->numRows() - 1;  // 顶点个数
+        std::vector<std::vector<int>> subsets;  // 保存所有连通子图的顶点集
+
+        // 确定路径数限制
+        std::random_device rd;
+        std::mt19937 gen(rd());
+
+        std::uniform_int_distribution<> dis(10000, 100000);
+        int targetPaths = dis(gen);
+        std::cout << "Target path count: " << targetPaths << std::endl;
+
+        subsets.reserve(targetPaths); // 预留空间
+
+        // DFS 收集路径，达到目标数量后停止
+        int pathCount = 0;
+        std::function<void(NodeId, std::vector<int>&)> dfs = [&](NodeId node, std::vector<int>& path) {
+            if (pathCount >= targetPaths) return;  // 提前终止
+            
+            if (node == 0) return;
+            if (node == 1) {
+                subsets.push_back(path);
+                pathCount++;
+                return;
+            }
+            
+            int var = node.row();
+            Node<ARITY> const* p = &(*diagram)[var][node.col()];
+            
+            dfs(p->branch[0], path);
+            
+            if (pathCount >= targetPaths) return;
+            
+            path.push_back(var);
+            dfs(p->branch[1], path);
+            path.pop_back();
+        };
+        
+        std::vector<int> path;
+        dfs(root_, path);
+
+        // 写出矩阵文件
+        int numCols = n;
+        int numRows = subsets.size();
+        os << numCols << " " << numRows << "\n";
+
+        for (auto& subset : subsets) {
+            os << subset.size();
+            std::sort(subset.begin(), subset.end());  // 按顶点编号排序
+            for (int v : subset) {
+                os << " " << v;  // 输出顶点编号（1-based）
+            }
+            os << "\n";
+        }
+
+        std::cout << "Matrix exported: " << numRows << " rows, " << numCols << " cols." << std::endl;
+    }
+
+    void enumZddPath(std::vector<std::vector<int>>& paths,
+                    std::map<int, int>& vertexToColId,
+                    int maxPathsPerCustomer = 100) {
+        
+        // 从 ZDD 枚举路径
+        int pathCount = 0;
+        std::function<void(NodeId, std::vector<int>&)> dfs = 
+            [&](NodeId node, std::vector<int>& path) {
+            if (pathCount >= maxPathsPerCustomer) return;
+            
+            if (node == 0) return;
+            if (node == 1) {
+                // 一条路径找到了，提取其中的客户点
+                std::vector<int> customerCols;
+                for (int vertex : path) {
+                    if (vertexToColId.count(vertex)) {
+                        customerCols.push_back(vertexToColId[vertex]);
+                    }
+                }
+                
+                // 只有包含至少一个客户点的路径才是有效的option
+                if (!customerCols.empty()) {
+                    std::sort(customerCols.begin(), customerCols.end());
+                    // 去重
+                    customerCols.erase(
+                        std::unique(customerCols.begin(), customerCols.end()),
+                        customerCols.end()
+                    );
+                    paths.push_back(customerCols);
+                    pathCount++;
+                }
+                return;
+            }
+            
+            int var = node.row();
+            Node<2> const* p = &(*diagram)[var][node.col()];
+            
+            dfs(p->branch[0], path);
+            
+            if (pathCount >= maxPathsPerCustomer) return;
+            
+            path.push_back(var);
+            dfs(p->branch[1], path);
+            path.pop_back();
+        };
+        
+        std::vector<int> path;
+        dfs(root_, path);
+        
+        std::cout << "  Paths extracted: " << pathCount << std::endl;
+    }
+
 };
 
 } // namespace tdzdd

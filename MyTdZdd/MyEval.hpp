@@ -72,6 +72,13 @@ public:
 		dd.dumpDot(ofs);
 		ofs.close();
 	}
+
+	void dumpMatrix(std::string file_name) {
+		ofstream ofs(file_name.c_str());
+		if (ofs.fail()) fopen_err(file_name);
+		dd.dumpMatrix(ofs);
+		ofs.close();
+	}
 };
 
 } // namespace hybriddd
