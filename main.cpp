@@ -45,8 +45,8 @@ ProcessingResult processSingleFile(const std::string& input_path, const std::str
         if (verbose) {
             MyEval result_eval = mytdzdd.Connected(IntSubset({1}));
             // 保存ZDD结果到Matrix文件  
-            result_eval.dumpMatrix(output_path.c_str());
             result_eval.dump(std::cout);
+            result_eval.dumpMatrix(output_path.c_str());
         } else {
             mytdzdd.EnumCycle(output_path.c_str());
         }

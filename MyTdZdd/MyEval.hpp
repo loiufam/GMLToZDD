@@ -74,10 +74,11 @@ public:
 	}
 
 	void dumpMatrix(std::string file_name) {
-		ofstream ofs(file_name.c_str());
-		if (ofs.fail()) fopen_err(file_name);
-		dd.dumpMatrix(ofs);
-		ofs.close();
+		int zdd_paths = std::stoi(getCardinality());
+		ofstream os(file_name.c_str());
+		if (os.fail()) fopen_err(file_name); 
+		dd.dumpMatrix(os, zdd_paths);
+		os.close();
 	}
 };
 

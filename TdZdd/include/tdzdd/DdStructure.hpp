@@ -758,28 +758,44 @@ public:
      * 第一行：列数 行数
      * 其余行：<元素个数> [col ...]  (col 从 1 开始编号)
      */
-    void dumpMatrix(std::ostream& os) const {
-        int const n = diagram->numRows() - 1;  // 顶点个数
+    void dumpMatrix(std::ostream& os, int zddPath, int minPath = 150000, int maxPath = 200000) const {
+        int n = diagram->numRows() - 1;  // 顶点个数
         std::vector<std::vector<int>> subsets;  // 保存所有连通子图的顶点集
-
-        // 确定路径数限制
-        std::random_device rd;
-        std::mt19937 gen(rd());
-
-        std::uniform_int_distribution<> dis(10000, 100000);
-        int targetPaths = dis(gen);
-        std::cout << "Target path count: " << targetPaths << std::endl;
-
-        subsets.reserve(targetPaths); // 预留空间
-
-        // DFS 收集路径，达到目标数量后停止
+        
+        // 确定目标路径数
+        int targetPath = zddPath;
+        if (zddPath > maxPath) {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(minPath, maxPath);
+            targetPath = dis(gen);
+            std::cout << "Target path count: " << targetPath 
+                    << " (randomly selected between " << minPath << " and " << maxPath << ")" << std::endl;
+        } else {
+            std::cout << "Target path count: " << targetPath << " (all paths)" << std::endl;
+        }
+        
+        subsets.reserve(targetPath);
+        
+        // DFS 收集路径（统一逻辑）
         int pathCount = 0;
+        int maxCol = 0;
+        
         std::function<void(NodeId, std::vector<int>&)> dfs = [&](NodeId node, std::vector<int>& path) {
-            if (pathCount >= targetPaths) return;  // 提前终止
+            // 提前终止条件（只在采样时生效）
+            if (zddPath > maxPath && pathCount >= targetPath) return;
             
-            if (node == 0) return;
-            if (node == 1) {
+            if (node == 0) return;   // False 终端
+            
+            if (node == 1) {         // True 终端
                 subsets.push_back(path);
+                
+                // 更新最大列号
+                if (!path.empty()) {
+                    int max_val = *std::max_element(path.begin(), path.end());
+                    maxCol = std::max(maxCol, max_val);
+                }
+                
                 pathCount++;
                 return;
             }
@@ -787,10 +803,13 @@ public:
             int var = node.row();
             Node<ARITY> const* p = &(*diagram)[var][node.col()];
             
+            // Low 分支：不选当前顶点
             dfs(p->branch[0], path);
             
-            if (pathCount >= targetPaths) return;
+            // 提前终止检查
+            if (zddPath > maxPath && pathCount >= targetPath) return;
             
+            // High 分支：选择当前顶点
             path.push_back(var);
             dfs(p->branch[1], path);
             path.pop_back();
@@ -798,22 +817,29 @@ public:
         
         std::vector<int> path;
         dfs(root_, path);
-
+        
+        // 使用实际的最大列号
+        n = (maxCol > 0) ? maxCol : n;
+        
         // 写出矩阵文件
         int numCols = n;
         int numRows = subsets.size();
         os << numCols << " " << numRows << "\n";
-
+        
         for (auto& subset : subsets) {
             os << subset.size();
             std::sort(subset.begin(), subset.end());  // 按顶点编号排序
             for (int v : subset) {
-                os << " " << v;  // 输出顶点编号（1-based）
+                os << " " << v;  // 输出顶点编号
             }
             os << "\n";
         }
-
+        
         std::cout << "Matrix exported: " << numRows << " rows, " << numCols << " cols." << std::endl;
+        
+        if (zddPath > maxPath && pathCount >= targetPath) {
+            std::cout << "Note: Path limit reached. Total paths in ZDD: " << zddPath << std::endl;
+        }
     }
 
     void enumZddPath(std::vector<std::vector<int>>& paths,

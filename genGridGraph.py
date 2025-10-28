@@ -4,9 +4,8 @@ def generate_grid_graph(rows, cols, output_file):
     """生成一个 rows x cols 的网格图数据文件。"""
     edges = []
 
-    # 顶点编号：从 1 开始，按行优先顺序编号
     def node_id(r, c):
-        return r * cols + c + 1
+        return r * cols + c
 
     for r in range(rows):
         for c in range(cols):
