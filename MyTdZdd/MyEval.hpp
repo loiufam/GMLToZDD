@@ -74,7 +74,8 @@ public:
 	}
 
 	void dumpMatrix(std::string file_name) {
-		int zdd_paths = std::stoi(getCardinality());
+		uint64_t zdd_paths = std::stoull(getCardinality());
+		std::cout << "# zdd paths : " << zdd_paths << std::endl;
 		ofstream os(file_name.c_str());
 		if (os.fail()) fopen_err(file_name); 
 		dd.dumpMatrix(os, zdd_paths);

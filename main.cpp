@@ -91,9 +91,9 @@ std::vector<ProcessingResult> batchProcessFolder(const std::string& input_folder
 
     std::string file_path_prefix;
     if (verbose) {
-        file_path_prefix = "./partition_set";
+        file_path_prefix = "data/partition_set";
     } else {
-        file_path_prefix = "./cycle_set";
+        file_path_prefix = "data/cycle_set";
     }
 
     // 处理每个文件

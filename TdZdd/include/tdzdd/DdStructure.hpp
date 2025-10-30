@@ -758,20 +758,21 @@ public:
      * 第一行：列数 行数
      * 其余行：<元素个数> [col ...]  (col 从 1 开始编号)
      */
-    void dumpMatrix(std::ostream& os, int zddPath, int minPath = 150000, int maxPath = 200000) const {
+    void dumpMatrix(std::ostream& os, uint64_t zddPath, int minPath = 5000, int maxPath = 100000) const {
         int n = diagram->numRows() - 1;  // 顶点个数
         std::vector<std::vector<int>> subsets;  // 保存所有连通子图的顶点集
         
         // 确定目标路径数
-        int targetPath = zddPath;
-        if (zddPath > maxPath) {
-            std::random_device rd;
-            std::mt19937 gen(rd());
+        int targetPath;
+        if (zddPath > static_cast<uint64_t>(maxPath)) {
+            static std::random_device rd;
+            static std::mt19937 gen(rd());
             std::uniform_int_distribution<> dis(minPath, maxPath);
             targetPath = dis(gen);
             std::cout << "Target path count: " << targetPath 
                     << " (randomly selected between " << minPath << " and " << maxPath << ")" << std::endl;
         } else {
+            targetPath = static_cast<int>(zddPath);
             std::cout << "Target path count: " << targetPath << " (all paths)" << std::endl;
         }
         
