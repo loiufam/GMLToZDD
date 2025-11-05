@@ -14,6 +14,7 @@ class GraphToExactCover:
         self.items = []  # 列（items）
         self.options = []  # 行（options）
         self.conversion_type = None
+        self.blocks_solutions = []  # 记录每个块的解
     
     def load_graph(self, filename: str) -> nx.Graph:
         """
@@ -41,263 +42,308 @@ class GraphToExactCover:
         
         self.graph = G
         return G
-    
-    def detect_graph_type(self) -> str:
+        
+    def generate_blocks(self, 
+                       num_blocks: int = 20,
+                       min_rows_per_block: int = 100,
+                       max_rows_per_block: int = 300,
+                       min_cols_per_block: int = 15,
+                       max_cols_per_block: int = 50,
+                       solution_diversity: str = 'medium' ) -> Tuple[List[int], List[List[int]]]:
         """
-        检测图的类型，判断应该使用哪种转换策略
+        生成指定数量的独立矩阵块
+        
+        参数:
+            num_blocks: 目标块数量 (默认20)
+            min_rows_per_block: 每块最小行数 (默认100)
+            max_rows_per_block: 每块最大行数 (默认300)
+            min_cols_per_block: 每块最小列数 (默认15)
+            max_cols_per_block: 每块最大列数 (默认50)
         """
-        # 检查是否是多个连通分量（Partition类型）
-        num_components = nx.number_connected_components(self.graph)
-        if num_components > 1:
-            return "partition"
-        
-        # 检查是否是欧拉图或近似欧拉图（Cycle类型）
-        odd_degree_count = 0
-        degree_dict = dict(self.graph.degree())  # 转换为字典
-        for v in self.graph.nodes():
-            if degree_dict[v] % 2 == 1:
-                odd_degree_count += 1
-        
-        if odd_degree_count <= 2:  # 欧拉图或半欧拉图
-            return "cycle"
-        
-        # 默认判断：如果边数较多且连通，可能是cycle类型
-        if self.graph.number_of_edges() >= self.graph.number_of_nodes():
-            return "cycle"
-        
-        return "partition"
-    
-    def partition_to_exact_cover(self, min_options: int = 500) -> Tuple[List[int], List[List[int]]]:
-        """
-        Partition类型：基于连通分量转换，生成多样化的option长度
-        """
-        print("使用 Partition 转换策略")
-        
-        # 找到所有连通分量
-        components = list(nx.connected_components(self.graph))
-        
-        # 如果只有1个连通分量，需要人工创建分块
-        if len(components) == 1:
-            print("检测到单一连通分量，将人工创建独立分块")
-            components = self._split_component_into_blocks(components[0])
-        
-        print(f"发现/创建 {len(components)} 个独立分块")
+        print(f"生成 {num_blocks} 个独立矩阵块")
         
         self.items = []
         self.options = []
-        item_to_col = {}
+        self.blocks_solutions = []
+        blocks_info = []
+        
         col_id = 1
         
-        # 记录已添加的options，避免重复
-        seen_options = set()
-        
-        for comp_idx, comp_verts in enumerate(components):
-            comp_verts = sorted(list(comp_verts))
-            comp_size = len(comp_verts)
+        for block_idx in range(num_blocks):
+            # 随机化每个块的尺寸
+            num_cols = random.randint(min_cols_per_block, max_cols_per_block)
+            num_rows = random.randint(min_rows_per_block, max_rows_per_block)
             
-            # 将该分量的顶点作为items
-            for v in comp_verts:
-                item_to_col[v] = col_id
-                self.items.append(v)
-                col_id += 1
-            
-            # 策略1：每条边作为一个option（长度=2）
-            for u, v in self.graph.edges():
-                if u in comp_verts and v in comp_verts:
-                    option = tuple(sorted([item_to_col[u], item_to_col[v]]))
-                    if option not in seen_options:
-                        seen_options.add(option)
-                        self.options.append(list(option))
-            
-            # 策略2：为每个顶点创建单独的option（长度=1）
-            for v in comp_verts:
-                option = tuple([item_to_col[v]])
-                if option not in seen_options:
-                    seen_options.add(option)
-                    self.options.append(list(option))
-            
-            # 策略3：生成不同长度的顶点组合
-            # 长度2的组合
-            if comp_size >= 2:
-                for combo in itertools.combinations(comp_verts, 2):
-                    option = tuple(sorted([item_to_col[v] for v in combo]))
-                    if option not in seen_options:
-                        seen_options.add(option)
-                        self.options.append(list(option))
-            
-            # 长度3的组合（部分采样）
-            if comp_size >= 3:
-                combos_3 = list(itertools.combinations(comp_verts, 3))
-                sample_size = min(len(combos_3), max(10, comp_size * 2))
-                for combo in random.sample(combos_3, sample_size):
-                    option = tuple(sorted([item_to_col[v] for v in combo]))
-                    if option not in seen_options:
-                        seen_options.add(option)
-                        self.options.append(list(option))
-            
-            # 长度4的组合（少量采样）
-            if comp_size >= 4:
-                combos_4 = list(itertools.combinations(comp_verts, 4))
-                sample_size = min(len(combos_4), max(5, comp_size))
-                for combo in random.sample(combos_4, sample_size):
-                    option = tuple(sorted([item_to_col[v] for v in combo]))
-                    if option not in seen_options:
-                        seen_options.add(option)
-                        self.options.append(list(option))
-            
-            # 策略4：生成随机长度的子集（长度从2到min(6, comp_size)）
-            if comp_size >= 2:
-                num_random = max(20, comp_size * 5)
-                for _ in range(num_random):
-                    # 多样化长度分布
-                    length_weights = {
-                        2: 0.25,  # 25%长度为2
-                        3: 0.30,  # 30%长度为3
-                        4: 0.20,  # 20%长度为4
-                        5: 0.15,  # 15%长度为5
-                        6: 0.10   # 10%长度为6或更多
-                    }
-                    max_len = min(6, comp_size)
-                    subset_size = random.choices(
-                        range(2, max_len + 1),
-                        weights=[length_weights.get(i, 0.05) for i in range(2, max_len + 1)]
-                    )[0]
-                    
-                    subset = random.sample(comp_verts, subset_size)
-                    option = tuple(sorted([item_to_col[v] for v in subset]))
-                    if option not in seen_options:
-                        seen_options.add(option)
-                        self.options.append(list(option))
-            
-            # 策略5：基于邻居关系生成连续的顶点子集
-            if comp_size >= 3:
-                for start_v in comp_verts[:min(5, comp_size)]:
-                    # BFS生成以start_v为中心的邻域
-                    for radius in range(1, min(4, comp_size)):
-                        neighborhood = set([start_v])
-                        frontier = set([start_v])
-                        for _ in range(radius):
-                            new_frontier = set()
-                            for v in frontier:
-                                neighbors = [n for n in self.graph.neighbors(v) if n in comp_verts]
-                                new_frontier.update(neighbors)
-                            neighborhood.update(new_frontier)
-                            frontier = new_frontier
-                        
-                        if len(neighborhood) >= 2:
-                            option = tuple(sorted([item_to_col[v] for v in neighborhood]))
-                            if option not in seen_options and len(option) <= 8:
-                                seen_options.add(option)
-                                self.options.append(list(option))
-        
-        # 如果options不够，继续生成更多样化的options
-        attempt = 0
-        while len(self.options) < min_options and attempt < 2000:
-            for comp_verts in components:
-                comp_verts = list(comp_verts)
-                if len(comp_verts) >= 2:
-                    # 随机选择长度，偏向中等长度
-                    max_len = min(7, len(comp_verts))
-                    subset_size = random.choices(
-                        range(2, max_len + 1),
-                        weights=[3, 4, 3, 2, 1, 1][:max_len - 1]
-                    )[0]
-                    
-                    subset = random.sample(comp_verts, subset_size)
-                    option = tuple(sorted([item_to_col[v] for v in subset]))
-                    if option not in seen_options:
-                        seen_options.add(option)
-                        self.options.append(list(option))
-            attempt += 1
-        
-        print(f"生成了 {len(self.options)} 个 options")
-        return self.items, self.options
-    
-    def _split_component_into_blocks(self, component: Set[int], min_blocks: int = 3) -> List[Set[int]]:
-        """
-        将一个连通分量分割成多个独立分块
-        使用社区检测或简单的度数分割
-        """
-        comp_verts = list(component)
-        comp_size = len(comp_verts)
-        
-        # 如果分量太小，直接分成小块
-        if comp_size <= 10:
-            blocks = []
-            block_size = max(2, comp_size // min_blocks)
-            for i in range(0, comp_size, block_size):
-                blocks.append(set(comp_verts[i:i + block_size]))
-            return blocks
-        
-        # 使用贪心社区检测方法
-        try:
-            # 创建子图
-            subgraph = self.graph.subgraph(comp_verts)
-            
-            # 使用Louvain社区检测
-            import networkx.algorithms.community as nx_comm
-            communities = list(nx_comm.greedy_modularity_communities(subgraph))
-            
-            # 如果社区数量少于min_blocks，进一步分割
-            if len(communities) < min_blocks:
-                blocks = []
-                for comm in communities:
-                    comm_list = list(comm)
-                    if len(comm_list) <= 5:
-                        blocks.append(set(comm_list))
-                    else:
-                        # 进一步分割大社区
-                        block_size = max(3, len(comm_list) // 2)
-                        for i in range(0, len(comm_list), block_size):
-                            blocks.append(set(comm_list[i:i + block_size]))
-                return blocks
-            else:
-                return [set(comm) for comm in communities]
-        except:
-            # 如果社区检测失败，使用简单的基于度数的分割
-            degree_dict = dict(self.graph.degree())
-            sorted_verts = sorted(comp_verts, key=lambda v: degree_dict[v])
-            
-            blocks = []
-            block_size = max(3, comp_size // min_blocks)
-            for i in range(0, comp_size, block_size):
-                blocks.append(set(sorted_verts[i:i + block_size]))
-            return blocks
+            # 记录这个块的列范围
+            block_cols = list(range(col_id, col_id + num_cols))
 
-    def find_euler_paths(self, start_vertex: int, max_paths: int = 2000) -> List[List[int]]:
-        """
-        使用DFS找多条路径（简化版）
-        """
-        paths = []
+            # 生成该块的矩阵和解
+            block_rows, block_solutions = self._generate_block_with_solution(
+                block_cols, num_rows, solution_diversity
+            )
+
+            blocks_info.append({
+                'id': block_idx,
+                'cols': block_cols,
+                'rows': block_rows,
+                'solutions': block_solutions
+            })
+            
+            # 添加items（列）
+            self.items.extend(block_cols)
+            self.blocks_solutions.append(block_solutions)
+
+            # 更新列id
+            col_id += num_cols
         
-        for attempt in range(max_paths):
-            G_copy = self.graph.copy()
-            stack = [start_vertex]
-            path = []
-            
-            while stack:
-                v = stack[-1]
-                neighbors = list(G_copy.neighbors(v))
-                if neighbors:
-                    u = random.choice(neighbors)
-                    stack.append(u)
-                    G_copy.remove_edge(v, u)
-                else:
-                    path.append(stack.pop())
-            
-            path = path[::-1]
-            
-            # 验证路径有效性
-            if len(path) >= 3:
-                paths.append(path)
-            
-            if len(paths) >= max_paths // 3:
-                break
+        # 打乱行顺序，使矩阵看起来不是块状的
+        all_rows = []
+        for block in blocks_info:
+            all_rows.extend(block['rows'])
         
-        return paths
+        random.shuffle(all_rows)
+        self.options = all_rows
+        
+        print(f"生成完成：{len(self.items)} 列，{len(self.options)} 行")
+        
+        return self.items, self.options
+       
+    def _generate_block_with_solution(self, cols: List[int], num_rows: int, 
+                                      diversity: str) -> Tuple[List[List[int]], List[List[List[int]]]]:
+        """
+        为一个块生成包含精确覆盖解的行集合
+        
+        策略：
+        1. 先构造1个或多个精确覆盖解
+        2. 基于解添加兼容的额外行
+        3. 添加一些"干扰行"增加难度
+        """
+        num_cols = len(cols)
+        
+        # 确定要生成的解的数量
+        if diversity == 'low':
+            num_solutions = random.randint(1, 2)
+        elif diversity == 'medium':
+            num_solutions = random.randint(2, 5)
+        else:  # high
+            num_solutions = random.randint(5, 15)
+        
+        solutions = []
+        solution_rows = set()  # 所有解中使用的行
+        
+        # 生成多个不同的解
+        for sol_idx in range(num_solutions):
+            solution = self._generate_one_solution(cols)
+            solutions.append(solution)
+            for row in solution:
+                solution_rows.add(tuple(row))
+        
+        # 所有解的行作为基础
+        rows = [list(row) for row in solution_rows]
+        
+        # 计算还需要多少额外行
+        remaining_rows = num_rows - len(rows)
+        
+        # 策略1：生成与解兼容的部分覆盖行（40%）
+        num_compatible = int(remaining_rows * 0.4)
+        compatible_rows = self._generate_compatible_rows(cols, solutions, num_compatible)
+        rows.extend(compatible_rows)
+        
+        # 策略2：生成冲突行（与解中某些行有列重叠，但不是完全相同）（30%）
+        num_conflict = int(remaining_rows * 0.3)
+        conflict_rows = self._generate_conflict_rows(cols, solution_rows, num_conflict)
+        rows.extend(conflict_rows)
+        
+        # 策略3：生成完全随机的行（30%）
+        num_random = remaining_rows - num_compatible - num_conflict
+        random_rows = self._generate_random_rows(cols, num_random)
+        rows.extend(random_rows)
+        
+        return rows, solutions
+
+    def _generate_one_solution(self, cols: List[int]) -> List[List[int]]:
+        """
+        生成一个精确覆盖解
+        使用贪心策略：随机划分列到不相交的子集
+        """
+        num_cols = len(cols)
+        remaining_cols = set(cols)
+        solution = []
+        
+        while remaining_cols:
+            # 随机选择行的大小（偏向中等大小）
+            max_size = len(remaining_cols)
+            if max_size == 1:
+                size = 1
+            elif max_size == 2:
+                size = random.choices([1, 2], weights=[0.3, 0.7])[0]
+            else:
+                # 使用正态分布，偏向 num_cols / 5 左右的大小
+                mean_size = max(2, min(num_cols // 5, max_size // 2))
+                size = max(1, min(max_size, int(random.gauss(mean_size, mean_size / 2))))
+            
+            # 从剩余列中随机选择
+            selected = random.sample(list(remaining_cols), size)
+            solution.append(sorted(selected))
+            remaining_cols -= set(selected)
+        
+        return solution
     
+    def _generate_compatible_rows(self, cols: List[int], solutions: List[List[List[int]]], 
+                                  num_rows: int) -> List[List[int]]:
+        """
+        生成与解兼容的行（即这些行可以和解共存，不会破坏精确覆盖性质）
+        策略：选择解中某些行的子集
+        """
+        rows = []
+        all_solution_rows = []
+        for sol in solutions:
+            all_solution_rows.extend(sol)
+        
+        for _ in range(num_rows):
+            if not all_solution_rows:
+                break
+            
+            # 随机选择一个解中的行
+            base_row = random.choice(all_solution_rows)
+            
+            # 生成该行的子集
+            if len(base_row) <= 1:
+                continue
+            
+            subset_size = random.randint(1, len(base_row) - 1)
+            subset = sorted(random.sample(base_row, subset_size))
+            rows.append(subset)
+        
+        return rows
+    
+    def _generate_conflict_rows(self, cols: List[int], solution_rows: Set[Tuple], 
+                               num_rows: int) -> List[List[int]]:
+        """
+        生成与解有部分重叠的冲突行
+        这些行不能出现在任何解中，因为它们会与解的某些行冲突
+        """
+        rows = []
+        solution_rows_list = [list(row) for row in solution_rows]
+        
+        for _ in range(num_rows):
+            if not solution_rows_list:
+                break
+            
+            # 选择一个解中的行作为基础
+            base_row = random.choice(solution_rows_list)
+            
+            # 保留该行的一部分，并添加新的列
+            if len(base_row) > 0:
+                # 保留 30%-70% 的列
+                keep_ratio = random.uniform(0.3, 0.7)
+                keep_size = max(1, int(len(base_row) * keep_ratio))
+                kept_cols = set(random.sample(base_row, keep_size))
+                
+                # 添加不在base_row中的新列
+                available_cols = [c for c in cols if c not in base_row]
+                if available_cols:
+                    add_size = random.randint(1, min(5, len(available_cols)))
+                    new_cols = set(random.sample(available_cols, add_size))
+                    
+                    conflict_row = sorted(list(kept_cols | new_cols))
+                    if tuple(conflict_row) not in solution_rows:
+                        rows.append(conflict_row)
+        
+        return rows
+    
+    def _generate_random_rows(self, cols: List[int], num_rows: int) -> List[List[int]]:
+        """生成完全随机的行"""
+        rows = []
+        num_cols = len(cols)
+        
+        for _ in range(num_rows):
+            # 多样化的行长度分布
+            size = random.choices(
+                range(1, min(11, num_cols + 1)),
+                weights=[3, 5, 4, 3, 2, 2, 1, 1, 1, 1][:min(10, num_cols)]
+            )[0]
+            size = min(size, num_cols)
+            
+            row = sorted(random.sample(cols, size))
+            rows.append(row)
+        
+        return rows
+
+    def generate_from_graph(self,
+                           target_blocks: int = 20,
+                           min_rows_per_block: int = 100,
+                           min_cols_per_block: int = 15,
+                           solution_diversity: str = 'medium') -> Tuple[List[int], List[List[int]]]:
+        """
+        基于图结构生成块，每个块包含精确覆盖解
+        """
+        if self.graph is None:
+            raise ValueError("需要提供图对象")
+        
+        print(f"基于图生成 {target_blocks} 个带解的块")
+        
+        all_nodes = list(self.graph.nodes())
+        random.shuffle(all_nodes)
+        
+        total_nodes = len(all_nodes)
+        base_nodes_per_block = max(min_cols_per_block, total_nodes // target_blocks)
+        
+        blocks_info = []
+        col_id = 1
+        node_idx = 0
+        
+        for block_idx in range(target_blocks):
+            if block_idx == target_blocks - 1:
+                block_nodes = all_nodes[node_idx:]
+            else:
+                variation = random.randint(-5, 10)
+                block_size = max(min_cols_per_block, 
+                               min(base_nodes_per_block + variation, 
+                                   total_nodes - node_idx - (target_blocks - block_idx - 1) * min_cols_per_block))
+                block_nodes = all_nodes[node_idx:node_idx + block_size]
+                node_idx += block_size
+            
+            if not block_nodes:
+                continue
+            
+            node_to_col = {node: col_id + i for i, node in enumerate(block_nodes)}
+            block_cols = list(node_to_col.values())
+            
+            # 生成带解的矩阵块
+            num_rows = random.randint(min_rows_per_block, min_rows_per_block + 200)
+            block_rows, block_solutions = self._generate_block_with_solution(
+                block_cols, num_rows, solution_diversity
+            )
+            
+            blocks_info.append({
+                'id': block_idx,
+                'cols': block_cols,
+                'nodes': block_nodes,
+                'rows': block_rows,
+                'solutions': block_solutions
+            })
+            
+            self.items.extend(block_cols)
+            self.blocks_solutions.append(block_solutions)
+            col_id += len(block_nodes)
+        
+        # 打乱所有行
+        all_rows = []
+        for block in blocks_info:
+            all_rows.extend(block['rows'])
+        
+        random.shuffle(all_rows)
+        self.options = all_rows
+        
+        print(f"生成完成：{len(self.items)} 列，{len(self.options)} 行")
+        
+        return self.items, self.options
+
+
     def cycle_to_exact_cover(self, target_ratio: float = 0.4, 
-                            min_options: int = 500) -> Tuple[List[int], List[List[int]]]:
+                            min_options: int = 500,
+                            num_blocks: int = None) -> Tuple[List[int], List[List[int]]]:
         """
         Cycle类型：基于路径/回路转换，生成多样化长度的options
         """
@@ -320,8 +366,12 @@ class GraphToExactCover:
         target_vertices = set(random.sample(remaining, num_targets))
         print(f"选择了 {len(target_vertices)} 个目标顶点")
 
+        # 指定分块数量为4-6个
+        if num_blocks is None:
+            num_blocks = random.randint(4, 6)
+
         # 将目标点分成多个组，创建独立分块
-        target_groups = self._create_target_groups(target_vertices, min_groups=3)
+        target_groups = self._create_target_groups(target_vertices, num_groups=num_blocks )
         print(f"目标点分为 {len(target_groups)} 组（独立分块）")
         
         # 目标点作为items，重编号
@@ -337,12 +387,18 @@ class GraphToExactCover:
         
         self.options = []
         seen_options = set()
-        
+
+        # 计算每个分块应生成的options数量
+        total_target = 10000
+        per_block_options = total_target // (len(target_groups) + 2)  # 留一些给跨分块
+            
         # 为每个分块独立生成options
         for group_idx, target_group in enumerate(target_groups):
             print(f"为分块{group_idx + 1}生成options...")
             group_options = self._generate_options_for_group(
-                start_vertex, target_group, vertex_to_col, 50
+                start_vertex, target_group, vertex_to_col, 
+                min_options=per_block_options,
+                min_length=5  # 新增：最小长度要求
             )
             print(f"  生成 {len(group_options)} 个options")
             
@@ -352,38 +408,26 @@ class GraphToExactCover:
                     seen_options.add(option_tuple)
                     self.options.append(list(option))
         
-        # 生成一些跨分块的options（少量，增加难度）
-        cross_block_options = min(50, len(self.options) // 10)
-        print(f"生成 {cross_block_options} 个跨分块options...")
-        for _ in range(cross_block_options):
-            # 从不同分块中选择目标点
-            num_groups_to_mix = random.randint(2, min(3, len(target_groups)))
-            selected_groups = random.sample(target_groups, num_groups_to_mix)
-            
-            mixed_targets = []
-            for group in selected_groups:
-                num_from_group = random.randint(1, min(2, len(group)))
-                mixed_targets.extend(random.sample(list(group), num_from_group))
-            
-            if mixed_targets:
-                option = tuple(sorted([vertex_to_col[v] for v in mixed_targets]))
-                if option not in seen_options and len(option) <= 10:
-                    seen_options.add(option)
-                    self.options.append(list(option))
+        cross_block_target = total_target // 3  # 约1/3是跨分块的
+        print(f"生成 {cross_block_target} 个跨分块options...")
+        cross_count = self._generate_cross_block_options(
+            start_vertex, target_groups, vertex_to_col, 
+            seen_options, cross_block_target
+        )
+        print(f"  实际生成 {cross_count} 个跨分块options")
+
+        print(f"最终options总数: {len(self.options)}")
+        print(f"平均长度: {sum(len(opt) for opt in self.options) / len(self.options):.2f}")
         
-        # 确保每个item至少被覆盖一次
-        # covered = set()
-        # for option in self.options:
-        #     covered.update(option)
-        
-        # uncovered = set(range(len(self.items))) - covered
-        # for col_id in uncovered:
-        #     self.options.append([col_id + 1]) # 单独覆盖该item
-        
-        print(f"生成了 {len(self.options)} 个 options")
+        # 统计长度分布
+        length_dist = {}
+        for opt in self.options:
+            length_dist[len(opt)] = length_dist.get(len(opt), 0) + 1
+        print(f"长度分布: {dict(sorted(length_dist.items()))}")
+     
         return self.items, self.options
     
-    def _create_target_groups(self, target_vertices: Set[int], min_groups: int = 3) -> List[Set[int]]:
+    def _create_target_groups(self, target_vertices: Set[int], num_groups: int = 5) -> List[Set[int]]:
         """
         将目标点分成多个组，每组形成一个独立分块
         """
@@ -391,90 +435,206 @@ class GraphToExactCover:
         num_targets = len(targets_list)
         
         # 确定分组数量
-        num_groups = max(min_groups, num_targets // 5)  # 每组至少5个目标点
-        num_groups = min(num_groups, num_targets // 2)  # 每组至少2个目标点
+        num_groups = min(num_groups, num_targets // 2)
+        num_groups = max(2, num_groups)  # 至少2组
         
         # 随机打乱并分组
         random.shuffle(targets_list)
         
         groups = []
         group_size = num_targets // num_groups
+        remainder = num_targets % num_groups
         
+        start_idx = 0
         for i in range(num_groups):
-            if i == num_groups - 1:
-                # 最后一组包含剩余所有
-                group = set(targets_list[i * group_size:])
-            else:
-                group = set(targets_list[i * group_size:(i + 1) * group_size])
+            # 将余数平均分配到前几组
+            size = group_size + (1 if i < remainder else 0)
+            group = set(targets_list[start_idx:start_idx + size])
             groups.append(group)
+            start_idx += size
         
         return groups
     
     def _generate_options_for_group(self, start_vertex: int, target_group: Set[int], 
-                                     vertex_to_col: Dict[int, int], min_options: int) -> List[List[int]]:
+                                 vertex_to_col: Dict[int, int], min_options: int,
+                                 min_length: int = 5) -> List[List[int]]:
         """
-        为特定目标组生成options
+        为特定目标组生成大量options，优先生成长度>=min_length的
         """
         options = []
         seen = set()
+        target_list = list(target_group)
+        group_size = len(target_group)
         
-        # 策略1：单个目标点
-        for target in target_group:
-            option = [vertex_to_col[target]]
-            options.append(option)
-            seen.add(tuple(option))
+        print(f"   分块包含 {group_size} 个目标点")
         
-        # 策略3：三个组合（采样）
-        if len(target_group) >= 3:
-            combos = list(itertools.combinations(target_group, 3))
-            sample_size = min(len(combos), max(20, len(target_group) * 2))
-            for combo in random.sample(combos, sample_size):
-                option = sorted([vertex_to_col[v] for v in combo])
+        # ✅ 根据分组大小调整长度分布
+        max_length = min(10, group_size)
+        actual_min_length = min(min_length, group_size)
+        
+        # 动态生成长度目标
+        length_targets = {}
+        for length in range(actual_min_length, max_length + 1):
+            if length <= group_size:
+                # 长度越接近分组大小，生成越多
+                weight = (length - actual_min_length + 1) / (max_length - actual_min_length + 1)
+                length_targets[length] = int(min_options * weight * 0.15)
+        
+        for length, count in length_targets.items():
+            for _ in range(count):
+                subset = random.sample(target_list, length)
+                option = sorted([vertex_to_col[v] for v in subset])
                 option_tuple = tuple(option)
                 if option_tuple not in seen:
                     options.append(option)
                     seen.add(option_tuple)
         
-        # 策略4：找路径并提取该组的目标点
-        for target in list(target_group)[:min(10, len(target_group))]:
-            try:
-                paths = list(nx.all_simple_paths(self.graph, start_vertex, target, cutoff=8))[:20]
-                for path in paths:
-                    targets_in_path = [v for v in path if v in target_group]
-                    if len(targets_in_path) >= 2:
-                        option = sorted([vertex_to_col[v] for v in targets_in_path])
-                        option_tuple = tuple(option)
-                        if option_tuple not in seen and len(option) <= 8:
-                            options.append(option)
-                            seen.add(option_tuple)
-            except:
-                pass
+        print(f"   策略1(固定长度组合): {len(options)} 个")
         
-        print(f"   最小options数量: {min_options}, 当前生成: {len(options)}")
-        # 策略5：随机组合不同长度
-        while len(options) < min_options:
-            if len(target_group) >= 2:
-                subset_size = random.randint(2, min(6, len(target_group)))
-                subset = random.sample(list(target_group), subset_size)
+        # 策略2：基于路径生成（扩大搜索范围）
+        path_options = self._generate_path_based_options(
+            start_vertex, target_list, vertex_to_col, seen, 
+            max_targets=min(30, len(target_list)),  # 增加搜索目标数
+            cutoff=10  # 增加路径长度限制
+        )
+        options.extend(path_options)
+        print(f"   策略2(路径): +{len(path_options)} 个，累计 {len(options)}")
+        
+        # 策略3：组合策略 - 生成大量中等长度的组合
+        if len(target_group) >= 5:
+            combo_count = 0
+            for length in range(5, min(11, len(target_group) + 1)):
+                combos = list(itertools.combinations(target_group, length))
+                # ✅ 根据组合数量智能采样
+                if len(combos) > 1000:
+                    sample_size = min(1000, min_options // 5)
+                elif len(combos) > 100:
+                    sample_size = len(combos)  # 全部使用
+                else:
+                    # 组合太少，多次使用（打乱顺序）
+                    sampled = combos * (100 // len(combos) + 1)
+                    sample_size = min(100, len(sampled))
+                    
+                for combo in sampled:
+                    option = sorted([vertex_to_col[v] for v in combo])
+                    option_tuple = tuple(option)
+                    if option_tuple not in seen:
+                        options.append(option)
+                        seen.add(option_tuple)
+                        combo_count += 1
+            
+            print(f"   策略3(组合): +{combo_count} 个，累计 {len(options)}")
+        
+        # 策略4：随机长度组合（填充到目标数量）
+        attempt = 0
+        max_attempts = min_options * 3
+        while len(options) < min_options and attempt < max_attempts:
+            attempt += 1
+            if len(target_group) >= min_length:
+                # 优先生成长度>=5的
+                subset_size = random.choices(
+                    range(min_length, min(11, len(target_group) + 1)),
+                    weights=[3, 3, 2, 2, 1, 1][:min(11, len(target_group) + 1) - min_length]
+                )[0]
+                subset = random.sample(target_list, subset_size)
                 option = sorted([vertex_to_col[v] for v in subset])
                 option_tuple = tuple(option)
-                options.append(option)
-
-            else:
-                break
+                if option_tuple not in seen:
+                    options.append(option)
+                    seen.add(option_tuple)
+        
+        print(f"   策略4(随机填充): 最终 {len(options)} 个")
+        
+        return options
+    
+    def _generate_path_based_options(self, start_vertex: int, target_list: List[int],
+                                    vertex_to_col: Dict[int, int], seen: Set,
+                                    max_targets: int = 30, cutoff: int = 10) -> List[List[int]]:
+        """
+        基于路径生成options
+        """
+        options = []
+        target_set = set(target_list)
+        
+        for target in target_list[:max_targets]:
+            try:
+                # 增加路径数量
+                paths = list(nx.all_simple_paths(
+                    self.graph, start_vertex, target, cutoff=cutoff
+                ))[:50]  # 增加到50条路径
+                
+                for path in paths:
+                    # 从路径中提取目标点
+                    targets_in_path = [v for v in path if v in target_set]
+                    
+                    if len(targets_in_path) >= 3:
+                        # 生成不同子集
+                        for subset_size in range(3, min(len(targets_in_path) + 1, 11)):
+                            if subset_size <= len(targets_in_path):
+                                # 每个长度采样几个
+                                for _ in range(min(3, len(targets_in_path) - subset_size + 1)):
+                                    subset = random.sample(targets_in_path, subset_size)
+                                    option = sorted([vertex_to_col[v] for v in subset])
+                                    option_tuple = tuple(option)
+                                    if option_tuple not in seen:
+                                        options.append(option)
+                                        seen.add(option_tuple)
+            except Exception as e:
+                continue
         
         return options
 
-    def convert(self, graph_file: str, output_file: str, 
-                conversion_type: str = "auto", min_options: int = 500):
+    def _generate_cross_block_options(self, start_vertex: int, 
+                                   target_groups: List[Set[int]],
+                                   vertex_to_col: Dict[int, int],
+                                   seen_options: Set,
+                                   target_count: int) -> int:
+        """
+        生成大量跨分块的options
+        """
+        count = 0
+        attempts = 0
+        max_attempts = target_count * 10
+        
+        while count < target_count and attempts < max_attempts:
+            attempts += 1
+            
+            # 随机选择2-4个分块
+            num_groups = random.randint(2, min(4, len(target_groups)))
+            selected_groups = random.sample(target_groups, num_groups)
+            
+            # 从每个分块中选择顶点
+            mixed_targets = []
+            for group in selected_groups:
+                # 每个分块选择2-4个顶点
+                num_from_group = random.randint(1, min(3, len(group)))
+                mixed_targets.extend(random.sample(list(group), num_from_group))
+            
+            # 确保总长度合适
+            if 3 <= len(mixed_targets) <= 15:
+                option = tuple(sorted([vertex_to_col[v] for v in mixed_targets]))
+                if option not in seen_options:
+                    seen_options.add(option)
+                    self.options.append(list(option))
+                    count += 1
+            elif len(mixed_targets) > 12:
+                # 如果太长，随机选择一个子集
+                subset = random.sample(mixed_targets, random.randint(5, 10))
+                option = tuple(sorted([vertex_to_col[v] for v in subset]))
+                if option not in seen_options:
+                    seen_options.add(option)
+                    self.options.append(list(option))
+                    count += 1
+        
+        return count
+
+    def convert(self, graph_file: str, output_file: str, mode: int = 1):
         """
         转换单个图文件
         
         Args:
             graph_file: 输入图文件路径
             output_file: 输出矩阵文件路径
-            conversion_type: 转换类型 ("auto", "partition", "cycle")
-            min_options: 最小options数量
         """
         print(f"\n{'='*60}")
         print(f"转换文件: {graph_file}")
@@ -485,34 +645,18 @@ class GraphToExactCover:
         print(f"加载图: {self.graph.number_of_nodes()} 个顶点, "
               f"{self.graph.number_of_edges()} 条边")
         
-        # 确定转换类型
-        if conversion_type == "auto":
-            conversion_type = self.detect_graph_type()
-            print(f"自动检测类型: {conversion_type}")
+        print(f"采用模式 {mode} 进行转换\n")
+        if mode == 1:
+            self.generate_blocks( num_blocks=25, min_rows_per_block=300, max_rows_per_block=500, min_cols_per_block=25, max_cols_per_block=50)
         else:
-            print(f"使用指定类型: {conversion_type}")
-        
-        self.conversion_type = conversion_type
-        
-        # 执行转换
-        if conversion_type == "partition":
-            self.partition_to_exact_cover(min_options)
-        elif conversion_type == "cycle":
-            self.cycle_to_exact_cover(min_options=min_options)
-        else:
-            raise ValueError(f"未知的转换类型: {conversion_type}")
-        
+            self.generate_from_graph( target_blocks=20, min_rows_per_block=300, min_cols_per_block=25 )
+
         # 保存矩阵
         self.save_matrix(output_file)
         print(f"矩阵已保存到: {output_file}")
         
-        # 打印统计信息
-        self.print_stats()
     
-    def batch_convert(self, input_dir: str, output_dir: str, 
-                     conversion_type: str = "auto", 
-                     min_options: int = 500,
-                     pattern: str = "*.in"):
+    def batch_convert(self, input_dir: str, output_dir: str, mode: int = 1, max_count: int = 500):
         """
         批量转换目录中的所有图文件
         
@@ -525,6 +669,7 @@ class GraphToExactCover:
         """
         import glob
         
+        pattern = "*.in"
         # 创建输出目录
         os.makedirs(output_dir, exist_ok=True)
         
@@ -552,8 +697,10 @@ class GraphToExactCover:
                 print(f"[{i}/{len(graph_files)}] 处理: {base_name}")
                 
                 # 转换
-                self.convert(graph_file, output_file, conversion_type, min_options)
+                self.convert(graph_file, output_file, mode)
                 success_count += 1
+                if success_count > max_count:
+                    break
                 
             except Exception as e:
                 print(f"错误: 转换 {graph_file} 时失败: {str(e)}")
@@ -631,32 +778,26 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  # 单文件转换（自动检测类型）
-  python script.py -i graph.txt -o matrix.txt
-  
-  # 单文件转换（指定类型）
-  python script.py -i graph.txt -o matrix.txt -t partition
+
+  # 单文件转换（指定模式）
+  python script.py -i graph.txt -o matrix.txt -m 1
   
   # 批量转换
-  python script.py -b -i ./graphs -o ./matrices
+  python script.py -b -i ./graphs -o ./matrices -m 1
   
-  # 批量转换，指定最小options数
-  python script.py -b -i ./graphs -o ./matrices --min-options 800
         """)
     
     parser.add_argument('-i', '--input', required=True,
                        help='输入文件路径（单文件）或输入目录（批量）')
     parser.add_argument('-o', '--output', required=True,
                        help='输出文件路径（单文件）或输出目录（批量）')
-    parser.add_argument('-t', '--type', default='auto',
-                       choices=['auto', 'partition', 'cycle'],
-                       help='转换类型 (default: auto)')
+    parser.add_argument('-m', '--mode', type=int, default=1, choices=[1, 2],
+                       help='转换模式 (default: 1)')
     parser.add_argument('-b', '--batch', action='store_true',
                        help='批量转换模式')
-    parser.add_argument('--min-options', type=int, default=500,
-                       help='最小options数量 (default: 500)')
-    parser.add_argument('--pattern', default='*.in',
-                       help='批量模式下的文件匹配模式 (default: *.in)')
+    parser.add_argument('-maxConvert', type=int, default=500,
+                       help='最大批量转换数量 (default: 500)')
+
     
     args = parser.parse_args()
     
@@ -667,17 +808,15 @@ def main():
         converter.batch_convert(
             args.input, 
             args.output, 
-            args.type, 
-            args.min_options,
-            args.pattern
+            args.mode,
+            args.maxConvert
         )
     else:
         # 单文件转换
         converter.convert(
             args.input, 
             args.output, 
-            args.type, 
-            args.min_options
+            args.mode
         )
 
 
