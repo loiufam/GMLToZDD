@@ -153,6 +153,162 @@ def parse_zdd_to_rows(zdd_file_path):
 
 
 # ============================================================
+# 步骤 3.5: 分块内精确覆盖解构造 (增强行多样性)
+# ============================================================
+# 目标: 每个分块除了 ZDD 自身枚举出的路径行之外, 主动构造 10~100 组
+# "精确覆盖解"(每组的若干行在该分块的列集合 U_b 上形成一个划分,
+# 即每列恰好覆盖一次, 行之间列不相交)。把每组解中的每一行作为
+# 独立矩阵行注入, 并做全局 frozenset 去重, 从而提升下游 DLX
+# 求解器的搜索空间。
+#
+# 注意:
+# 1) 新增行的局部列索引只来自 U_b (即本块 ZDD 行里出现过的列),
+#    所以不会扩展 block_max_local_col, 分块列空间独立性保持不变。
+# 2) 去重在全局 seen_frozensets 上做, 保证最终矩阵无重复行。
+
+MIN_EXTRA_SOLUTIONS_PER_BLOCK = 10   # 每块最少目标构造组数
+MAX_EXTRA_SOLUTIONS_PER_BLOCK = 100  # 每块最多目标构造组数
+SOLUTION_BUILD_MAX_TRIES = 2000      # 单块构造尝试次数上限, 避免死循环
+
+
+def _solution_from_zdd_rows(universe, zdd_rows_local, rng):
+    """
+    贪心地从 ZDD 行中挑出一组列不相交的行, 直到列用完; 剩余列用
+    singleton 行(单列一行)补齐。返回一个 list[list[int]], 每个
+    子 list 是该解的一行 (局部列索引, 排序)。
+    """
+    remaining = set(universe)
+    pool = [r for r in zdd_rows_local if r]  # 非空行
+    rng.shuffle(pool)
+
+    chosen = []
+    for row in pool:
+        s = frozenset(row)
+        if not s:
+            continue
+        # 整行必须落在 remaining 内, 才能保持"每列恰好一次"
+        if s.issubset(remaining):
+            chosen.append(sorted(s))
+            remaining -= s
+            if not remaining:
+                break
+
+    # 剩余列用 singleton 补齐, 保证列恰好被覆盖一次
+    for c in sorted(remaining):
+        chosen.append([c])
+
+    return chosen
+
+
+def _solution_from_partition(universe, rng):
+    """
+    把 universe 随机打散后切成若干段, 每段作为解的一行。
+    天然满足"每列恰好覆盖一次"。返回 list[list[int]]。
+    """
+    cols = list(universe)
+    if not cols:
+        return []
+    rng.shuffle(cols)
+    n = len(cols)
+
+    # 随机选划分块数 k ∈ [1, n], 偏向 2 ~ sqrt(n)*2 之间的中等粒度
+    upper = max(2, min(n, int(n ** 0.5) * 2 + 1))
+    k = rng.randint(1, upper) if n > 1 else 1
+
+    # 随机生成 k-1 个切点, 得到 k 段
+    if k == 1:
+        parts_idx = [(0, n)]
+    else:
+        cuts = sorted(rng.sample(range(1, n), k - 1))
+        parts_idx = []
+        prev = 0
+        for c in cuts:
+            parts_idx.append((prev, c))
+            prev = c
+        parts_idx.append((prev, n))
+
+    return [sorted(cols[a:b]) for (a, b) in parts_idx]
+
+
+def build_extra_exact_cover_rows(zdd_rows_local, seen_frozensets, rng):
+    """
+    为一个分块构造额外的精确覆盖解, 把每组解的每一行作为独立行返回。
+
+    参数:
+        zdd_rows_local: 该分块 ZDD 解析出的行 (局部列索引, list[list[int]])
+        seen_frozensets: 全局已出现的行集合 (用 frozenset 去重, 会被原地更新)
+        rng: random.Random 实例, 便于复现
+    返回:
+        extra_local_rows: list[list[int]], 需要注入的新行 (局部列索引)
+        stats: dict, 包含构造统计信息
+    """
+    stats = {
+        "target_solutions": 0,
+        "built_solutions": 0,
+        "injected_rows": 0,
+        "skipped_duplicate_rows": 0,
+    }
+
+    if not zdd_rows_local:
+        return [], stats
+
+    # 本块的列全集 = ZDD 行里出现过的所有局部列
+    universe = set()
+    for r in zdd_rows_local:
+        universe.update(r)
+    if not universe:
+        return [], stats
+
+    target = rng.randint(MIN_EXTRA_SOLUTIONS_PER_BLOCK,
+                         MAX_EXTRA_SOLUTIONS_PER_BLOCK)
+    stats["target_solutions"] = target
+
+    extra_local_rows = []
+    built = 0
+    tries = 0
+
+    # 两种构造方法交替使用, 提高多样性
+    while built < target and tries < SOLUTION_BUILD_MAX_TRIES:
+        tries += 1
+        use_zdd_based = (tries % 2 == 0) and len(zdd_rows_local) > 0
+        if use_zdd_based:
+            solution = _solution_from_zdd_rows(universe, zdd_rows_local, rng)
+        else:
+            solution = _solution_from_partition(universe, rng)
+
+        if not solution:
+            continue
+
+        # 正确性校验: 每列恰好覆盖一次 (行之间列不相交, 且并集 == universe)
+        covered = []
+        for row in solution:
+            covered.extend(row)
+        if len(covered) != len(universe) or set(covered) != universe:
+            # 构造函数本应保证, 这里只是双保险
+            continue
+
+        # 把本组解的每一行作为独立行加入, 全局 frozenset 去重
+        any_new = False
+        for row in solution:
+            key = frozenset(row)
+            if not key:
+                continue
+            if key in seen_frozensets:
+                stats["skipped_duplicate_rows"] += 1
+                continue
+            seen_frozensets.add(key)
+            extra_local_rows.append(sorted(row))
+            stats["injected_rows"] += 1
+            any_new = True
+
+        if any_new:
+            built += 1
+            stats["built_solutions"] = built
+
+    return extra_local_rows, stats
+
+
+# ============================================================
 # 步骤 4: 导出导出子图给 ZDD 引擎
 # ============================================================
 def export_subgraph_for_zdd(sub_graph, sub_order, prefix, temp_dir):
@@ -211,6 +367,11 @@ def block_zdd_strategy(G, order, zdd_engine_bin, temp_dir, base_name):
     col_offset = 0
     success_count = 0
     failed_blocks = []
+
+    # 全局行去重集合: key = frozenset(全局列索引), 保证最终矩阵无重复行
+    seen_frozensets = set()
+    # 复用一个 rng 便于复现 (保持和上层 random 状态一致即可, 这里直接用 module 级)
+    rng = random.Random(random.randint(0, 2**31 - 1))
 
     for block_idx, block_nodes in enumerate(block_nodes_list):
         sub_G = G.subgraph(block_nodes).copy()
@@ -272,13 +433,56 @@ def block_zdd_strategy(G, order, zdd_engine_bin, temp_dir, base_name):
             failed_blocks.append(block_idx)
             continue
 
-        mapped = [[c + col_offset for c in row] for row in rows]
-        all_rows.extend(mapped)
+        # ---- 1) 先把 ZDD 原始行做全局去重后映射进 all_rows ----
+        zdd_rows_injected = 0
+        zdd_rows_dup = 0
+        for row in rows:
+            key = frozenset(c + col_offset for c in row)
+            if not key:
+                continue
+            if key in seen_frozensets:
+                zdd_rows_dup += 1
+                continue
+            seen_frozensets.add(key)
+            all_rows.append(sorted(key))
+            zdd_rows_injected += 1
+
+        # ---- 2) 构造额外的精确覆盖解以扩充行数 (每块 10~100 组) ----
+        # 使用"全局 frozenset 视角"的去重集合, 需要把局部列映射为全局列后再查重
+        #  --> 做法: 构造时先在局部列空间操作, 拿到局部行后再映射为全局列 frozenset 查重
+        # 为减少构造阶段的无效 tries, 先把本块 ZDD 行的局部 frozenset 放进构造函数
+        # 的内部去重集合, 避免反复构造出已有的行
+        local_seen = {frozenset(r) for r in rows if r}
+        extra_local_rows, extra_stats = build_extra_exact_cover_rows(
+            rows,
+            local_seen,
+            rng,
+        )
+
+        # 再用全局去重集合过滤一次 (映射到 global 列)
+        extra_injected = 0
+        extra_dup = 0
+        for lrow in extra_local_rows:
+            key = frozenset(c + col_offset for c in lrow)
+            if not key:
+                continue
+            if key in seen_frozensets:
+                extra_dup += 1
+                continue
+            seen_frozensets.add(key)
+            all_rows.append(sorted(key))
+            extra_injected += 1
+
         col_lo = col_offset + 1
         col_hi = col_offset + block_max_local_col
         col_offset += block_max_local_col
         success_count += 1
-        print(f"  [Block {block_idx + 1}] 提取 {len(rows)} 行, 全局列 {col_lo}~{col_hi}")
+        print(f"  [Block {block_idx + 1}] ZDD 行={len(rows)} "
+              f"(注入 {zdd_rows_injected}, 去重 {zdd_rows_dup}), "
+              f"构造解目标={extra_stats['target_solutions']} "
+              f"完成={extra_stats['built_solutions']}, "
+              f"额外行注入 {extra_injected} (去重 {extra_dup}), "
+              f"全局列 {col_lo}~{col_hi}")
 
     if success_count == 0 or not all_rows:
         return None, None
