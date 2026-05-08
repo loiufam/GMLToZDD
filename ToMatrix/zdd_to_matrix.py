@@ -53,5 +53,10 @@ def zbdd_to_sparse_matrix_file(input_file_path, output_file_path):
         for row in sparse_matrix:
             f.write(f"{len(row)} " + " ".join(map(str, row)) + "\n")
 
-# 转换
-zbdd_to_sparse_matrix_file("att48.zdd", "att48_t.txt")
+def main():
+    input_file_path = "input.zbdd"
+    output_file_path = "output.txt"
+    zbdd_to_sparse_matrix_file(input_file_path, output_file_path)
+
+if __name__ == "__main__":
+    main()
