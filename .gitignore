@@ -1,1 +1,8 @@
 .DS_Store
+__pycache__
+Agent
+ec_solver
+build_zdd_bin
+graphs_*
+origin_gml
+output

@@ -1,0 +1,11 @@
+experiment_id,instance,rows,cols,graph_vertices,graph_edges,dxz_status,dxz_solver_time_sec,dxd_threads,dxd_status,dxd_solver_time_sec,dxd_solutions,dxd_max_blocks,dyndxd_threads,dyndxd_status,dyndxd_solver_time_sec,dyndxd_solutions,dyndxd_max_blocks,target
+20261109_163114,grafo10350.96.txt,162090,750,96,125,timeout,,8,success,675.238143,6.362e+440,50,8,success,109.197582,6.362e+440,50,True
+20261109_163114,grafo10385.94.txt,164604,732,94,128,timeout,,8,success,431.818969,9.168e+431,48,8,success,71.717923,9.168e+431,48,True
+20261109_163114,grafo10901.94.txt,160270,735,94,132,timeout,,8,success,328.660167,7.257e+428,50,8,success,51.745411,7.257e+428,50,True
+20261109_163114,grafo11018.99.txt,184715,800,99,130,timeout,,8,timeout,,,,8,success,267.951752,1.595e+479,50,True
+20261109_163114,grafo11025.94.txt,163745,750,94,130,timeout,,8,success,670.125183,4.079e+440,50,8,success,110.257987,4.079e+440,50,True
+20261109_163114,grafo11188.99.txt,182740,795,99,134,timeout,,8,success,953.708147,1.511e+475,50,8,success,150.223518,1.511e+475,50,True
+20261109_163114,grafo11257.91.txt,161990,750,91,129,timeout,,8,success,964.165934,8.498e+440,50,8,success,150.349841,8.498e+440,50,True
+20261109_163114,grafo6585.97.txt,183515,800,97,132,timeout,,8,timeout,,,,8,success,273.162661,4.508e+478,50,True
+20261109_163114,grafo8348.99.txt,167725,760,99,133,timeout,,8,success,906.3984,1.700e+448,50,8,success,140.292246,1.700e+448,50,True
+20261109_163114,grafo8922.92.txt,144030,700,92,130,success,1068.840239,8,success,210.409728,2.139e+402,50,8,success,31.804539,2.139e+402,50,False

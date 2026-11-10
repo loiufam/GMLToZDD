@@ -1,0 +1,6 @@
+启用DXZ算法求解: grafo10901.94
+rows: 160270
+cols: 735
+设置并行线程数为: 1
+
+[experiment] process timeout after 1500s

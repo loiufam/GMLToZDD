@@ -1,0 +1,9 @@
+Instance: grafo10350.96
+启用DynDXD算法求解: grafo10350.96
+rows: 162090
+cols: 750
+Statistics graph initialization complete.
+设置并行线程数为: 8
+Time: 110.259535 s
+Solutions (scientific): 6.362e+440
+Max Blocks: 50

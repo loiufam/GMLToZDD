@@ -1,0 +1,11 @@
+Instance: grafo11188.99
+启用DynDXD算法求解: grafo11188.99
+rows: 182740
+cols: 795
+设置并行线程数为: 8
+Time: 150.223518 s
+Solutions (scientific): 1.511e+475
+Max Blocks: 50
+CC ETT Calls: 1
+CC BFS Calls: 10
+DynDXD算法求解结束: grafo11188.99

@@ -1,0 +1,8 @@
+Instance: grafo11018.99
+启用DynDXD算法求解: grafo11018.99
+rows: 184715
+cols: 800
+Statistics graph initialization complete.
+设置并行线程数为: 8
+
+[experiment] process timeout after 1500s

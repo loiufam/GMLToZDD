@@ -1,0 +1,23 @@
+Instance: grafo11188.99
+启用DynDXD算法求解: grafo11188.99
+rows: 1812
+cols: 168
+Statistics graph initialization complete.
+设置并行线程数为: 8
+[thread-task] task=0 omp_thread=3 rows=240 cols=14 area=3360 solve_sec=0.084356 cache_reads=18272 cache_hits=14886 cache_hit_rate=0.814689 cache_writes=3386 nodes_allocated=18440 cache_read_sec=0.003297 cache_write_sec=0.001043 node_lookup_sec=0.003737 node_insert_sec=0.003691 lock_wait_sec=0.000000
+[thread-task] task=1 omp_thread=5 rows=543 cols=36 area=19548 solve_sec=228.522394 cache_reads=64737822 cache_hits=35118460 cache_hit_rate=0.542472 cache_writes=29619362 nodes_allocated=64738296 cache_read_sec=32.967943 cache_write_sec=14.978666 node_lookup_sec=29.245896 node_insert_sec=21.742648 lock_wait_sec=0.000000
+[thread-task] task=2 omp_thread=1 rows=277 cols=28 area=7756 solve_sec=9.909999 cache_reads=2870949 cache_hits=1759763 cache_hit_rate=0.612955 cache_writes=1111186 nodes_allocated=2871162 cache_read_sec=1.236640 cache_write_sec=0.467771 node_lookup_sec=1.125738 node_insert_sec=0.658694 lock_wait_sec=0.000000
+[thread-task] task=3 omp_thread=6 rows=201 cols=28 area=5628 solve_sec=1.427632 cache_reads=337084 cache_hits=163148 cache_hit_rate=0.483998 cache_writes=173936 nodes_allocated=337237 cache_read_sec=0.122610 cache_write_sec=0.101130 node_lookup_sec=0.115368 node_insert_sec=0.095818 lock_wait_sec=0.000000
+[thread-task] task=4 omp_thread=0 rows=226 cols=26 area=5876 solve_sec=1.876080 cache_reads=610238 cache_hits=364267 cache_hit_rate=0.596926 cache_writes=245971 nodes_allocated=610414 cache_read_sec=0.213702 cache_write_sec=0.088524 node_lookup_sec=0.198242 node_insert_sec=0.137536 lock_wait_sec=0.000000
+[thread-task] task=5 omp_thread=7 rows=325 cols=36 area=11700 solve_sec=62.317833 cache_reads=18921562 cache_hits=9694899 cache_hit_rate=0.512373 cache_writes=9226663 nodes_allocated=18921831 cache_read_sec=9.136050 cache_write_sec=4.037062 node_lookup_sec=8.256220 node_insert_sec=5.319456 lock_wait_sec=0.000000
+[thread-summary] omp_thread=0 solve_sec=1.876080 cache_hit_rate=0.596926 cache_read_sec=0.213702 cache_write_sec=0.088524 node_lookup_sec=0.198242 node_insert_sec=0.137536 lock_wait_sec=0.000000
+[thread-summary] omp_thread=1 solve_sec=9.909999 cache_hit_rate=0.612955 cache_read_sec=1.236640 cache_write_sec=0.467771 node_lookup_sec=1.125738 node_insert_sec=0.658694 lock_wait_sec=0.000000
+[thread-summary] omp_thread=3 solve_sec=0.084356 cache_hit_rate=0.814689 cache_read_sec=0.003297 cache_write_sec=0.001043 node_lookup_sec=0.003737 node_insert_sec=0.003691 lock_wait_sec=0.000000
+[thread-summary] omp_thread=5 solve_sec=228.522394 cache_hit_rate=0.542472 cache_read_sec=32.967943 cache_write_sec=14.978666 node_lookup_sec=29.245896 node_insert_sec=21.742648 lock_wait_sec=0.000000
+[thread-summary] omp_thread=6 solve_sec=1.427632 cache_hit_rate=0.483998 cache_read_sec=0.122610 cache_write_sec=0.101130 node_lookup_sec=0.115368 node_insert_sec=0.095818 lock_wait_sec=0.000000
+[thread-summary] omp_thread=7 solve_sec=62.317833 cache_hit_rate=0.512373 cache_read_sec=9.136050 cache_write_sec=4.037062 node_lookup_sec=8.256220 node_insert_sec=5.319456 lock_wait_sec=0.000000
+Time: 249.194239 s
+Solutions (scientific): 2.566e+50
+Max Blocks: 6
+DNNF Size: 87497381
+DynDXD算法求解结束: grafo11188.99

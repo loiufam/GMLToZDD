@@ -1,0 +1,9 @@
+启用DXZ算法求解: grafo8348.99
+rows: 33639
+cols: 152
+设置并行线程数为: 1
+Time: 781.326023 s
+Solutions (scientific): 3.693e+89
+Max Blocks: 1
+ZDD Size: 22695350
+DXZ算法求解结束: grafo8348.99

@@ -1,0 +1,11 @@
+Instance: grafo10268.97
+启用DXD算法求解: grafo10268.97
+rows: 31546
+cols: 149
+设置并行线程数为: 8
+开始DXD搜索...
+Time: 249.714250 s
+Solutions (scientific): 2.416e+87
+Max Blocks: 10
+DNNF Size: 17340965
+DXD算法求解结束: grafo10268.97

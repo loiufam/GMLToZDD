@@ -127,6 +127,68 @@ def filter_graphs_from_csv(csv_path, src_folder, dest_folder,
 
     print(f"🎉 任务完成！成功挑选并复制了 {success_count} 个图文件。")
 
+def select_graphs_from_csv(csv_path, src_folder, dest_folder, top_n=10, exclude_folder=None):
+    """
+    从 CSV 中按顺序选择前 top_n 个图文件，并复制到目标文件夹。
+    如果 exclude_folder 不为 None，则会排除掉已经存在于该文件夹中的图文件。
+    """
+    if not os.path.exists(csv_path):
+        print(f"❌ 错误: 找不到 CSV 文件 {csv_path}。请先运行分析功能！")
+        return
+
+    src_path = Path(src_folder)
+    dest_path = Path(dest_folder)
+    dest_path.mkdir(parents=True, exist_ok=True)
+
+    exclude_files = set()
+    if exclude_folder:
+        exclude_path = Path(exclude_folder)
+        if exclude_path.exists() and exclude_path.is_dir():
+            exclude_files = {f.name for f in exclude_path.glob('*.graphml')}
+            print(f"📂 将排除 {len(exclude_files)} 个已存在于 {exclude_folder} 中的图文件。")
+        else:
+            print(f"⚠️ 警告: 排除文件夹不存在或不是目录 -> {exclude_folder}")
+
+    print(f"📂 正在从 {csv_path} 中读取并选择前 {top_n} 个图文件...")
+    
+    selected_files = []
+    
+    with open(csv_path, mode='r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            file_name = row['filename']
+            if file_name not in exclude_files:
+                selected_files.append(file_name)
+                if len(selected_files) >= top_n:
+                    break  # 达到所需数量，提前结束读取
+
+    if not selected_files:
+        print("⚠️ 未找到符合要求的图文件。")
+        return
+
+    print(f"🚀 开始从 {src_folder} 复制 {len(selected_files)} 个文件到 {dest_folder}...")
+    
+    success_count = 0
+    skip_count = 0
+
+    for file_name in selected_files:
+        src_file = src_path / file_name
+        dest_file = dest_path / file_name
+        
+        if not src_file.exists():
+            print(f"  [!] 文件丢失 (CSV中有记录但文件夹中未找到): {file_name}")
+            continue
+
+        if dest_file.exists():
+            print(f"  [=] 跳过已有文件: {file_name}")
+            skip_count += 1
+            continue
+        shutil.copy2(src_file, dest_file)
+        print(f"  [+] 复制成功: {file_name}")
+        success_count += 1
+
+    print(f"🎉 任务完成！成功挑选并复制了 {success_count} 个图文件。")
+
 if __name__ == "__main__":
     # ==================== 配置区 ====================
     # 你的 rome 文件夹路径
@@ -134,8 +196,10 @@ if __name__ == "__main__":
     # 分析结果保存的 CSV 文件名
     CSV_FILE_PATH = r"rome_analysis.csv" 
     # 筛选后存放图的目标文件夹
-    TARGET_FOLDER = r"../graphs_graphml/rome"
-    
+    TARGET_FOLDER = r"../graphs_graphml/rome_2"
+
+    CHOSEN_ROME = r"../graphs_graphml/rome_1"
+
     # ==================== 操作一：分析所有文件 ====================
     # 第一次使用，或者 rome 文件夹里有新图加入时，请取消注释运行下面这行
     
@@ -147,13 +211,22 @@ if __name__ == "__main__":
 
     # 第一次筛选范围： 130 > edges > 100 and 80 > nodes > 60，挑选 50 个
     
-    filter_graphs_from_csv(
+    # filter_graphs_from_csv(
+    #     csv_path=CSV_FILE_PATH,
+    #     src_folder=ROME_FOLDER,
+    #     dest_folder=TARGET_FOLDER,
+    #     min_edges=100,   # 最小边数
+    #     max_edges=130,  # 最大边数
+    #     min_nodes=60,   # 最小节点数
+    #     max_nodes=80,   # 最大节点数
+    #     top_n=5         # 挑选 N 个图
+    # )
+
+    # 按照csv从前往后找 N 个图到目标文件夹，要求不能在 CHOSEN_ROME 文件夹中已存在
+    select_graphs_from_csv(
         csv_path=CSV_FILE_PATH,
         src_folder=ROME_FOLDER,
         dest_folder=TARGET_FOLDER,
-        min_edges=100,   # 最小边数
-        max_edges=130,  # 最大边数
-        min_nodes=60,   # 最小节点数
-        max_nodes=80,   # 最大节点数
-        top_n=5         # 挑选 N 个图
+        top_n=300,  # 挑选前 N 个图
+        exclude_folder=CHOSEN_ROME  # 排除已存在于这个文件夹中的图
     )
